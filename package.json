@@ -20,7 +20,8 @@
     "@neeo/cli": "^1.1.0",
     "bleno": "^0.5.0",
     "bluebird": "^3.5.2",
-    "neeo-sdk": "^0.53.8",
-    "neeo-sdk-webunity": "github:Webunity/neeo-sdk-webunity"
+    "config": "^1.28.1",
+    "debug": "^3.1.0",
+    "neeo-sdk": "^0.53.8"
   }
 }
