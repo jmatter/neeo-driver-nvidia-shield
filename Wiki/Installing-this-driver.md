@@ -1,5 +1,5 @@
 
-_You should have a Neeo-cli server running before attempting to install and run this driver. I have [a github page right here](https://github.com/Webunity/neeo-cli-webunity/wiki), which not only describes how to set that up, but also how to run this server automatically at boot._
+_You should have a Neeo-cli server running before attempting to install and run this driver. I have [a github page right here](https://github.com/Webunity/neeo-sdk-webunity/wiki), which not only describes how to set that up, but also how to run this server automatically at boot._
 
 ```
 cd /opt/<your-neoo-server/
