@@ -3,8 +3,17 @@
   "version": "0.0.1",
   "description": "Custom driver to support the NVidia Shield via BlueTooth on the Neeo remote.",
   "main": "index.js",
+  "dependencies": {
+    "@neeo/cli": "^1.1.0",
+    "bluebird": "^3.5.2",
+    "config": "^1.28.1",
+    "debug": "^3.1.0",
+    "neeo-sdk": "^0.53.8"
+  },
+  "devDependencies": {},
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "npx neeo-cli start"
   },
   "repository": {
     "type": "git",
@@ -12,16 +21,15 @@
   },
   "author": "Gilles van den Hoven <gilles@webunity.nl>",
   "license": "MIT",
+  "homepage": "https://github.com/Webunity/neeo-driver-nvidia-shield#readme",
   "bugs": {
     "url": "https://github.com/Webunity/neeo-driver-nvidia-shield/issues"
   },
-  "homepage": "https://github.com/Webunity/neeo-driver-nvidia-shield#readme",
-  "dependencies": {
-    "@neeo/cli": "^1.1.0",
-    "bleno": "^0.5.0",
-    "bluebird": "^3.5.2",
-    "config": "^1.28.1",
-    "debug": "^3.1.0",
-    "neeo-sdk": "^0.53.8"
+  "engines": {
+    "node": ">=8.0.0"
+  },
+  "neeoSdkOptions": {
+    "serverName": "nvidia-shield",
+    "serverPort": 6337
   }
 }
