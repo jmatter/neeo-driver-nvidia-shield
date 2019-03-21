@@ -2,7 +2,7 @@
 PORT_DIR = ../assets/btstack/port/libusb
 MONGOOSE_DIR = ../assets/mongoose
 
-.DEFAULT_GOAL := neeo-shield-interface
+.DEFAULT_GOAL := neeo-shield-driver
 
 # Include correct Makefile for the required settings
 include ${PORT_DIR}/Makefile
@@ -16,7 +16,7 @@ CFLAGS+= -DMG_ENABLE_FILESYSTEM=1
 # Setup sources for dependencies
 SOURCES = ${CORE_OBJ} ${COMMON_OBJ} ${ATT_OBJ} ${GATT_SERVER_OBJ} ${SM_OBJ} battery_service_server.o device_information_service_server.o hids_device.o btstack_ring_buffer.o
 SOURCES+= ${MONGOOSE_DIR}/mongoose.c
-SOURCES+= neeo-shield-interface.c
+SOURCES+= neeo-shield-driver.c
 
 # Remove flags
 CFLAGS:=$(filter-out -Wredundant-decls,${CFLAGS})
@@ -24,8 +24,8 @@ CFLAGS:=$(filter-out -Wshadow,${CFLAGS})
 CFLAGS:=$(filter-out -Wmissing-prototypes,${CFLAGS})
 
 # define target
-neeo-shield-interface = neeo-shield-interface
+neeo-shield-driver = neeo-shield-driver
 
 # Create our target
-neeo-shield-interface: $(SOURCES)
-	${CC} $^ ${CFLAGS} ${LDFLAGS} -o ../neeo-shield-interface
+neeo-shield-driver: $(SOURCES)
+	${CC} $^ ${CFLAGS} ${LDFLAGS} -o ../neeo-shield-driver

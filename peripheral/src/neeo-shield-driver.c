@@ -9,8 +9,8 @@
 //--------------------------------------------------
 // BLE includes
 //--------------------------------------------------
-#include "neeo-shield-interface.h"
-#include "neeo-shield-interface-services.h"  // Include pre-generated services header
+#include "neeo-shield-driver.h"
+#include "neeo-shield-driver-services.h"  // Include pre-generated services header
 
 #include "btstack.h"
 #include "ble/gatt-service/battery_service_server.h"

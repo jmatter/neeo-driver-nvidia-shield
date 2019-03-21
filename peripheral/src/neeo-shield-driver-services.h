@@ -1,5 +1,5 @@
 
-// neeo-shield-interface-services.h generated from services/neeo-shield-interface-services.gatt for BTstack
+// neeo-shield-driver-services.h generated from services/neeo-shield-driver-services.gatt for BTstack
 // att db format version 1
 
 // binary attribute representation:
