@@ -29,7 +29,7 @@
 //--------------------------------------------------
 // BLE variables
 //--------------------------------------------------
-static btstack_packet_callback_registration_t hci_event_callback_registration;
+//static btstack_packet_callback_registration_t hci_event_callback_registration;
 static btstack_packet_callback_registration_t sm_event_callback_registration;
 static hci_con_handle_t con_handle = HCI_CON_HANDLE_INVALID;
 
@@ -37,7 +37,7 @@ static const uint8_t adv_data[] = {
   // Flags general discoverable, BR/EDR not supported
   0x02, BLUETOOTH_DATA_TYPE_FLAGS, 0x06,
   // Name
-  0x0d, BLUETOOTH_DATA_TYPE_COMPLETE_LOCAL_NAME, 'N','e', 'e', 'o', ' ', 'S', 'h', 'i', 'e', 'l', 'd', ' ', 'I', 'n', 't', 'e', 'r', 'f', 'a', 'c', 'e',
+  0x13, BLUETOOTH_DATA_TYPE_COMPLETE_LOCAL_NAME, 'N','e', 'e', 'o', ' ', 'S', 'h', 'i', 'e', 'l', 'd', ' ', 'd', 'r', 'i', 'v', 'e', 'r',
   // 16-bit Service UUIDs
   0x03, BLUETOOTH_DATA_TYPE_COMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS, ORG_BLUETOOTH_SERVICE_HUMAN_INTERFACE_DEVICE & 0xff, ORG_BLUETOOTH_SERVICE_HUMAN_INTERFACE_DEVICE >> 8,
   // Appearance (remote),
@@ -106,11 +106,17 @@ static const uint8_t hid_descriptor_keyboard_boot_mode_len = sizeof(hid_descript
 //--------------------------------------------------
 // Websocket variables
 //--------------------------------------------------
+#define WS_SETUP_DELAY 2500
+
 static bool ws_initialized = false;
 static const char *ws_http_port = "8000";
 static struct mg_serve_http_opts ws_http_server_opts;
 static struct mg_mgr ws_mgr;
 static struct mg_connection *ws_nc;
+
+static btstack_timer_source_t ws_setup_timer;
+static btstack_timer_source_t ws_poll_timer;
+
 static enum {
     IDLE,
     SENDING_FROM_BUFFER,
@@ -183,15 +189,18 @@ static void peripheral_setup(void)
   gap_advertisements_enable(1);
 
   // register for HCI events
-  hci_event_callback_registration.callback = &peripheral_packet_handler;
-  hci_add_event_handler(&hci_event_callback_registration);
+  //hci_event_callback_registration.callback = &peripheral_packet_handler;
+  //hci_add_event_handler(&hci_event_callback_registration);
 
   // register for SM events
   sm_event_callback_registration.callback = &peripheral_packet_handler;
   sm_add_event_handler(&sm_event_callback_registration);
 
   // register for HIDS
-  hids_device_register_packet_handler(peripheral_packet_handler);
+  //hids_device_register_packet_handler(peripheral_packet_handler);
+
+  // register for ATT
+  att_server_register_packet_handler(peripheral_packet_handler);
 }
 
 /**
@@ -224,69 +233,75 @@ static void peripheral_packet_handler(uint8_t packet_type, uint16_t channel, uin
 
   switch (hci_event_packet_get_type(packet))
   {
-  case SM_EVENT_JUST_WORKS_REQUEST:
-    printf("[Bluetooth driver]: Pairing method 'Just Works' requested\n");
-    sm_just_works_confirm(sm_event_just_works_request_get_handle(packet));
-    break;
-  case L2CAP_EVENT_CONNECTION_PARAMETER_UPDATE_RESPONSE:
-    printf("[Bluetooth driver]: L2CAP connection parameter update complete, response: %x\n", l2cap_event_connection_parameter_update_response_get_result(packet));
-    break;
-  case HCI_EVENT_DISCONNECTION_COMPLETE:
-    con_handle = HCI_CON_HANDLE_INVALID;
-    printf("[Bluetooth driver]: Client disconnected\n");
+    case SM_EVENT_JUST_WORKS_REQUEST:
+      printf("[Bluetooth driver]: Pairing method 'Just Works' requested\n");
+      sm_just_works_confirm(sm_event_just_works_request_get_handle(packet));
+      break;
+    case SM_EVENT_PAIRING_COMPLETE:
+      switch (sm_event_pairing_complete_get_status(packet)) {
+        case ERROR_CODE_SUCCESS:
+          printf("[Bluetooth driver]: Pairing complete, success\n");
 
-    if (ws_initialized) {
-      websocket_teardown();
-    }
-    break;
-  case HCI_EVENT_LE_META:
-    switch (hci_event_le_meta_get_subevent_code(packet))
-    {
-    case HCI_SUBEVENT_LE_CONNECTION_COMPLETE:
-      con_handle = hids_subevent_input_report_enable_get_con_handle(packet);
-      // print connection parameters (without using float operations)
-      conn_interval = hci_subevent_le_connection_complete_get_conn_interval(packet);
-      printf("[Bluetooth driver]: Client connection complete:\n");
-      printf("- Connection Interval: %u.%02u ms\n", conn_interval * 125 / 100, 25 * (conn_interval & 3));
-      printf("- Connection Latency: %u\n", hci_subevent_le_connection_complete_get_conn_latency(packet));
-
-      // request min con interval 15 ms for iOS 11+
-      gap_request_connection_parameter_update(con_handle, 12, 12, 0, 0x0048);
-      break;
-    case HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE:
-      // print connection parameters (without using float operations)
-      conn_interval = hci_subevent_le_connection_update_complete_get_conn_interval(packet);
-      printf("[Bluetooth driver]: Client connection update:\n");
-      printf("- Connection Interval: %u.%02u ms\n", conn_interval * 125 / 100, 25 * (conn_interval & 3));
-      printf("- Connection Latency: %u\n", hci_subevent_le_connection_update_complete_get_conn_latency(packet));
-      break;
-    default:
-      break;
-    }
-    break;
-  case HCI_EVENT_HIDS_META:
-    switch (hci_event_hids_meta_get_subevent_code(packet))
-    {
-    case HIDS_SUBEVENT_BOOT_KEYBOARD_INPUT_REPORT_ENABLE:
-      con_handle = hids_subevent_input_report_enable_get_con_handle(packet);
-      printf("[Bluetooth driver]: Boot Keyboard Characteristic Subscribed %u\n", hids_subevent_boot_keyboard_input_report_enable_get_enable(packet));
-      break;
-    case HIDS_SUBEVENT_INPUT_REPORT_ENABLE:
-      con_handle = hids_subevent_input_report_enable_get_con_handle(packet);
-      printf("[Bluetooth driver]: Report Characteristic Subscribed %u\n", hids_subevent_input_report_enable_get_enable(packet));
-      if (!ws_initialized) {
-      	websocket_setup();
+          if (!ws_initialized) {
+            // set one-shot timer
+            ws_setup_timer.process = &websocket_setup;
+            btstack_run_loop_set_timer(&ws_setup_timer, WS_SETUP_DELAY);
+            btstack_run_loop_add_timer(&ws_setup_timer);
+          }
+          break;
+        case ERROR_CODE_CONNECTION_TIMEOUT:
+          printf("[Bluetooth driver]: Pairing failed, timeout\n");
+          break;
+        case ERROR_CODE_REMOTE_USER_TERMINATED_CONNECTION:
+          printf("[Bluetooth driver]: Pairing faileed, disconnected\n");
+          break;
+        case ERROR_CODE_AUTHENTICATION_FAILURE:
+          printf("[Bluetooth driver]: Pairing failed, reason = %u\n", sm_event_pairing_complete_get_reason(packet));
+          break;
+        default:
+          break;
       }
       break;
-    case HIDS_SUBEVENT_PROTOCOL_MODE:
-      printf("[Bluetooth driver]: Protocol Mode: %s mode\n", hids_subevent_protocol_mode_get_protocol_mode(packet) ? "Report" : "Boot");
+    case HCI_EVENT_LE_META:
+      switch (hci_event_le_meta_get_subevent_code(packet)) {
+        case HCI_SUBEVENT_LE_CONNECTION_COMPLETE:
+          con_handle = hids_subevent_input_report_enable_get_con_handle(packet);
+          // print connection parameters (without using float operations)
+          conn_interval = hci_subevent_le_connection_complete_get_conn_interval(packet);
+          printf("[Bluetooth driver]: Client connection complete:\n");
+          printf("- Connection Interval: %u.%02u ms\n", conn_interval * 125 / 100, 25 * (conn_interval & 3));
+          printf("- Connection Latency: %u\n", hci_subevent_le_connection_complete_get_conn_latency(packet));
+
+          // request min con interval 15 ms for iOS 11+
+          gap_request_connection_parameter_update(con_handle, 12, 12, 0, 0x0048);
+          
+          if (!ws_initialized) {
+            // set one-shot timer
+            ws_setup_timer.process = &websocket_setup;
+            btstack_run_loop_set_timer(&ws_setup_timer, WS_SETUP_DELAY);
+            btstack_run_loop_add_timer(&ws_setup_timer);
+          }
+          break;
+        case HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE:
+          // print connection parameters (without using float operations)
+          conn_interval = hci_subevent_le_connection_update_complete_get_conn_interval(packet);
+          printf("[Bluetooth driver]: Client connection update:\n");
+          printf("- Connection Interval: %u.%02u ms\n", conn_interval * 125 / 100, 25 * (conn_interval & 3));
+          printf("- Connection Latency: %u\n", hci_subevent_le_connection_update_complete_get_conn_latency(packet));
+          break;
+        default:
+          break;
+      }
       break;
-    case HIDS_SUBEVENT_CAN_SEND_NOW:
-      printf("[Bluetooth driver]: HIDS_SUBEVENT_CAN_SEND_NOW\n");
+    case HCI_EVENT_DISCONNECTION_COMPLETE:
+      con_handle = HCI_CON_HANDLE_INVALID;
+      printf("[Bluetooth driver]: Client disconnected\n");
+
+      if (ws_initialized) {
+        websocket_teardown();
+      }
       break;
-    default:
-      break;
-    }
+    break;
   }
 }
 
@@ -299,7 +314,9 @@ static void peripheral_packet_handler(uint8_t packet_type, uint16_t channel, uin
 /**
  * Setup method for the WebSocket server
  */
-static void websocket_setup(void) {
+static void websocket_setup(btstack_timer_source_t * ts) {
+  ts = NULL; // prevent "unused parameter warning"
+
   mg_mgr_init(&ws_mgr, NULL);
   ws_nc = mg_bind(&ws_mgr, ws_http_port, websocket_event_handler);
   mg_set_protocol_http_websocket(ws_nc);
@@ -308,9 +325,23 @@ static void websocket_setup(void) {
 
   printf("[WebSocket server]: Started on port %s\n", ws_http_port);
 
+  // Fire once-shot polling timer
   ws_initialized = true;
-  while (ws_initialized) {
-    mg_mgr_poll(&ws_mgr, 1000);
+  ws_poll_timer.process = &websocket_poll;
+  btstack_run_loop_set_timer(&ws_poll_timer, 50);
+  btstack_run_loop_add_timer(&ws_poll_timer);
+}
+
+/**
+ * Method which handles the websocket connection polling and message handling
+ */
+static void websocket_poll(btstack_timer_source_t * ts) {
+  mg_mgr_poll(&ws_mgr, 100);
+  
+  // Keep running this timer until we are ready
+  if (ws_initialized) {
+    btstack_run_loop_set_timer(ts, 50);
+    btstack_run_loop_add_timer(ts);
   }
 }
 

@@ -1,5 +1,5 @@
 PRIMARY_SERVICE, GAP_SERVICE
-CHARACTERISTIC, GAP_DEVICE_NAME, READ, "Neeo Shield Interface"
+CHARACTERISTIC, GAP_DEVICE_NAME, READ, "Neeo Shield driver"
 
 // add Battery Service
 #import <battery_service.gatt>
