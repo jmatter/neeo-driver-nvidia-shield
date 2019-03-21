@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>WebSocket Test</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style type="text/css">
+    body {
+      background-color: #789; margin: 0;
+      padding: 0; font: 14px Helvetica, Arial, sans-serif;
+    }
+
+    div.content {
+      width: 800px; margin: 2em auto; padding: 20px 50px;
+      background-color: #fff; border-radius: 1em;
+    }
+
+    #messages {
+      border: 2px solid #fec; border-radius: 1em;
+      height: 20em; overflow: scroll; padding: 0.5em 1em;
+    }
+
+    a:link, a:visited { color: #69c; text-decoration: none; }
+
+    @media (max-width: 700px) {
+      body { background-color: #fff; }
+      div.content {
+        width: auto; margin: 0 auto; border-radius: 0;
+        padding: 1em;
+      }
+    }
+</style>
+
+<script language="javascript" type="text/javascript">
+
+  var rooms = [];
+  var ws = new WebSocket('ws://' + location.host + '/ws');
+
+  if (!window.console) { window.console = { log: function() {} } };
+
+  ws.onopen = function(ev)  { console.log(ev); };
+  ws.onerror = function(ev) { console.log(ev); };
+  ws.onclose = function(ev) { console.log(ev); };
+  ws.onmessage = function(ev) {
+    console.log(ev);
+    var div = document.createElement('div');
+    div.innerHTML = ev.data;
+    document.getElementById('messages').appendChild(div);
+
+  };
+
+  window.onload = function() {
+    document.getElementById('send_button').onclick = function(ev) {
+      var msg = document.getElementById('send_input').value;
+      document.getElementById('send_input').value = '';
+      ws.send(msg);
+    };
+    document.getElementById('send_input').onkeypress = function(ev) {
+      if (ev.keyCode == 13 || ev.which == 13) {
+        document.getElementById('send_button').click();
+      }
+    };
+  };
+</script>
+</head>
+<body>
+  <div class="content">
+    <h1>Bluetooth HID peripheral - Websocket server log</h1>
+
+    <div id="messages">
+    </div>
+
+    <p>
+      <input type="text" id="send_input" />
+      <button id="send_button">Send Command</button>
+    </p>
+
+    <hr size="1" />
+
+    <p>
+      This page shows the log of the websocket webserver, running on the Bluetooth HID peripheral. These commands are passed on to the paired device. You can even try to send some keycodes yourself. The format is &lt;modifier&gt;,&lt;keycode&gt;, where modifier is one of these codes:<br />
+      <ul>
+        <li>0: no modifier</li>
+        <li>1: Left Ctrl</li>
+        <li>2: Left Shift</li>
+        <li>4: Left Alt</li>
+        <li>8: Left GUI key (Windows key / Command key)</li>
+        <li>16: Right Ctrl</li>
+        <li>32: Right Shift</li>
+        <li>64: Right Alt</li>
+        <li>128: Right GUI key (Windows key / Command key)</li>
+      </ul>
+      <br />
+
+      The keycode is an numeric representation of a keycode between 1 and 255; for inspiration, take a look at a searchable page: <a href="https://serverhelfer.de/usb-hid-keyboard-scan-codes/">USB HID Keyboard Scan Codes</a> (remember to convert the HEX value to the numerical representation).<br />
+      <br />
+      Copyright &copy; Gilles van den Hoven (Webunity)<br />
+    </p>
+  </div>
+</body>
+</html>
