@@ -1,7 +1,7 @@
 {
   "name": "neeo-driver-nvidia-shield",
-  "version": "0.53.8",
-  "description": "Neeo remote driver to support the NVidia Shield via BlueTooth.",
+  "version": "0.0.1",
+  "description": "Custom driver to support the NVidia Shield via BlueTooth on the Neeo remote.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
