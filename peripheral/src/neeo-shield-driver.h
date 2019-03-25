@@ -52,7 +52,7 @@ static void peripheral_packet_handler(uint8_t packet_type, uint16_t channel, uin
 /**
  * Setup method for the websocket server
  */
-static void websocket_setup(btstack_timer_source_t * ts);
+static void websocket_setup(void);
 
 /**
  * Method which handles the websocket connection polling and message handling

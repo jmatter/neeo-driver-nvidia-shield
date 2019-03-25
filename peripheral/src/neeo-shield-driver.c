@@ -26,10 +26,24 @@
 
 
 
+
+//--------------------------------------------------
+// Peripheral variables
+//--------------------------------------------------
+#define PERIPHERAL_STATE_OFFLINE 0
+#define PERIPHERAL_STATE_WAITING_FOR_CONNECTION 1
+#define PERIPHERAL_STATE_IDLE 2
+#define PERIPHERAL_STATE_SENDING_FROM_BUFFER 3
+#define PERIPHERAL_STATE_SENDING_KEY_UP 4
+
+static uint8_t peripheral_state = PERIPHERAL_STATE_OFFLINE;
+
+
+
 //--------------------------------------------------
 // BLE variables
 //--------------------------------------------------
-//static btstack_packet_callback_registration_t hci_event_callback_registration;
+static btstack_packet_callback_registration_t hci_event_callback_registration;
 static btstack_packet_callback_registration_t sm_event_callback_registration;
 static hci_con_handle_t con_handle = HCI_CON_HANDLE_INVALID;
 
@@ -108,20 +122,13 @@ static const uint8_t hid_descriptor_keyboard_boot_mode_len = sizeof(hid_descript
 //--------------------------------------------------
 #define WS_SETUP_DELAY 2500
 
-static bool ws_initialized = false;
 static const char *ws_http_port = "8000";
 static struct mg_serve_http_opts ws_http_server_opts;
 static struct mg_mgr ws_mgr;
 static struct mg_connection *ws_nc;
 
-static btstack_timer_source_t ws_setup_timer;
 static btstack_timer_source_t ws_poll_timer;
 
-static enum {
-    IDLE,
-    SENDING_FROM_BUFFER,
-    SENDING_KEY_UP,
-} ws_state;
 
 
 //--------------------------------------------------
@@ -189,8 +196,8 @@ static void peripheral_setup(void)
   gap_advertisements_enable(1);
 
   // register for HCI events
-  //hci_event_callback_registration.callback = &peripheral_packet_handler;
-  //hci_add_event_handler(&hci_event_callback_registration);
+  hci_event_callback_registration.callback = &peripheral_packet_handler;
+  hci_add_event_handler(&hci_event_callback_registration);
 
   // register for SM events
   sm_event_callback_registration.callback = &peripheral_packet_handler;
@@ -233,21 +240,37 @@ static void peripheral_packet_handler(uint8_t packet_type, uint16_t channel, uin
 
   switch (hci_event_packet_get_type(packet))
   {
+    case BTSTACK_EVENT_STATE:
+      if ((btstack_event_state_get_state(packet) == HCI_STATE_WORKING) && (peripheral_state == PERIPHERAL_STATE_OFFLINE)) {
+        printf("[Bluetooth driver]: Online\n");
+
+        // Move to 'waiting for connection state', this will disable clients to send data via websockets
+        peripheral_state = PERIPHERAL_STATE_WAITING_FOR_CONNECTION;
+
+        // Turn on websocket server
+        websocket_setup();
+      }
+
+      if ((btstack_event_state_get_state(packet) == HCI_STATE_HALTING) && (peripheral_state != PERIPHERAL_STATE_OFFLINE)) {
+        peripheral_state = PERIPHERAL_STATE_OFFLINE;
+        printf("[Bluetooth driver]: Offline\n");
+
+        // Turn off websocket server
+        websocket_teardown();
+      }
+      break;
     case SM_EVENT_JUST_WORKS_REQUEST:
       printf("[Bluetooth driver]: Pairing method 'Just Works' requested\n");
       sm_just_works_confirm(sm_event_just_works_request_get_handle(packet));
       break;
     case SM_EVENT_PAIRING_COMPLETE:
+      // Required for initial pairing, to enable the websocket server
       switch (sm_event_pairing_complete_get_status(packet)) {
         case ERROR_CODE_SUCCESS:
           printf("[Bluetooth driver]: Pairing complete, success\n");
 
-          if (!ws_initialized) {
-            // set one-shot timer
-            ws_setup_timer.process = &websocket_setup;
-            btstack_run_loop_set_timer(&ws_setup_timer, WS_SETUP_DELAY);
-            btstack_run_loop_add_timer(&ws_setup_timer);
-          }
+          // Set state to 'idle', this will enable clients to send data via websockets
+          peripheral_state = PERIPHERAL_STATE_IDLE;
           break;
         case ERROR_CODE_CONNECTION_TIMEOUT:
           printf("[Bluetooth driver]: Pairing failed, timeout\n");
@@ -264,6 +287,7 @@ static void peripheral_packet_handler(uint8_t packet_type, uint16_t channel, uin
       break;
     case HCI_EVENT_LE_META:
       switch (hci_event_le_meta_get_subevent_code(packet)) {
+        // Required for connections after pairing completed (e.g. turn off/turn on device)
         case HCI_SUBEVENT_LE_CONNECTION_COMPLETE:
           con_handle = hids_subevent_input_report_enable_get_con_handle(packet);
           // print connection parameters (without using float operations)
@@ -274,13 +298,9 @@ static void peripheral_packet_handler(uint8_t packet_type, uint16_t channel, uin
 
           // request min con interval 15 ms for iOS 11+
           gap_request_connection_parameter_update(con_handle, 12, 12, 0, 0x0048);
-          
-          if (!ws_initialized) {
-            // set one-shot timer
-            ws_setup_timer.process = &websocket_setup;
-            btstack_run_loop_set_timer(&ws_setup_timer, WS_SETUP_DELAY);
-            btstack_run_loop_add_timer(&ws_setup_timer);
-          }
+
+          // Set state to 'idle', this will enable clients to send data via websockets
+          peripheral_state = PERIPHERAL_STATE_IDLE;
           break;
         case HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE:
           // print connection parameters (without using float operations)
@@ -297,9 +317,8 @@ static void peripheral_packet_handler(uint8_t packet_type, uint16_t channel, uin
       con_handle = HCI_CON_HANDLE_INVALID;
       printf("[Bluetooth driver]: Client disconnected\n");
 
-      if (ws_initialized) {
-        websocket_teardown();
-      }
+      // Move to 'waiting for connection state', this will disable clients to send data via websockets
+      peripheral_state = PERIPHERAL_STATE_WAITING_FOR_CONNECTION;
       break;
     break;
   }
@@ -314,9 +333,7 @@ static void peripheral_packet_handler(uint8_t packet_type, uint16_t channel, uin
 /**
  * Setup method for the WebSocket server
  */
-static void websocket_setup(btstack_timer_source_t * ts) {
-  ts = NULL; // prevent "unused parameter warning"
-
+static void websocket_setup(void) {
   mg_mgr_init(&ws_mgr, NULL);
   ws_nc = mg_bind(&ws_mgr, ws_http_port, websocket_event_handler);
   mg_set_protocol_http_websocket(ws_nc);
@@ -326,7 +343,6 @@ static void websocket_setup(btstack_timer_source_t * ts) {
   printf("[WebSocket server]: Started on port %s\n", ws_http_port);
 
   // Fire once-shot polling timer
-  ws_initialized = true;
   ws_poll_timer.process = &websocket_poll;
   btstack_run_loop_set_timer(&ws_poll_timer, 50);
   btstack_run_loop_add_timer(&ws_poll_timer);
@@ -337,12 +353,10 @@ static void websocket_setup(btstack_timer_source_t * ts) {
  */
 static void websocket_poll(btstack_timer_source_t * ts) {
   mg_mgr_poll(&ws_mgr, 100);
-  
+
   // Keep running this timer until we are ready
-  if (ws_initialized) {
-    btstack_run_loop_set_timer(ts, 50);
-    btstack_run_loop_add_timer(ts);
-  }
+  btstack_run_loop_set_timer(ts, 50);
+  btstack_run_loop_add_timer(ts);
 }
 
 /**
@@ -454,7 +468,6 @@ static void websocket_broadcast(struct mg_connection *nc, const struct mg_str ms
  * Destructor for the WebSocket server
  */
 static void websocket_teardown(void) {
-  ws_initialized = false;
   websocket_broadcast(ws_nc, mg_mk_str("Server going down!"));
   mg_mgr_free(&ws_mgr);
   printf("[WebSocket server]: Stopped.\n");
