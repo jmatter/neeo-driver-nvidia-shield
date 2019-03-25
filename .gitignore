@@ -60,5 +60,8 @@ typings/
 # next.js build output
 .next
 
+# Visual studio code folder(s)
+.vscode
+
 # Package-lock.json
 package-lock.json
