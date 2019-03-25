@@ -384,6 +384,10 @@ static void websocket_event_handler(struct mg_connection *nc, int ev, void *ev_d
       break;
     }
     case MG_EV_WEBSOCKET_FRAME: {
+      if (peripheral_state == PERIPHERAL_STATE_WAITING_FOR_CONNECTION) {
+        websocket_broadcast(nc, mg_mk_str("Error - No client is currently paired with the HID peripheral. Please check the documentation."));
+        break;
+      }
       struct websocket_message *wm = (struct websocket_message *) ev_data;
       char buffer[wm->size];
       sprintf(buffer, "%.*s", (uint8_t) wm->size, (char *) wm->data);
