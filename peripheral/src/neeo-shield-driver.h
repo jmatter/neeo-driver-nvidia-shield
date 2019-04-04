@@ -28,6 +28,12 @@ static bool in_array(uint8_t needle, uint8_t haystack[], uint8_t haystack_length
 static void peripheral_setup(void);
 
 /**
+ * Changes the peripheral state and logs this change
+ * @param new_state The new state the peripheral should take.
+ */
+static void peripheral_change_state(int new_state);
+
+/**
  * Used to send data to the peripheral.
  * @param modifier The modifier to send (ALT/CTRL, etc.)
  * @param keycode The keycode in ASCII to send to the peripheral.
@@ -57,7 +63,12 @@ static void websocket_setup(void);
 /**
  * Method which handles the websocket connection polling and message handling
  */
-static void websocket_poll(btstack_timer_source_t * ts);
+static void websocket_event_poll(btstack_timer_source_t * ts);
+
+/**
+ * Method which handles the reading of the buffer and sending it via HID if enabled.
+ */
+static void websocket_buffer_poll(btstack_timer_source_t * ts);
 
 /**
  * Event handler function, is called when a static file is requested, a client joins, a client sends a message and when a client disconnects.
