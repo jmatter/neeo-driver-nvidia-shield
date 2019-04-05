@@ -28,23 +28,23 @@
 
 
 //--------------------------------------------------
-// Peripheral variables
+// HID variables
 //--------------------------------------------------
-#define PERIPHERAL_STATE_OFFLINE 0
-#define PERIPHERAL_STATE_WAITING_FOR_CONNECTION 1
-#define PERIPHERAL_STATE_IDLE 2
-#define PERIPHERAL_STATE_BUSY 3
-#define PERIPHERAL_STATE_FILLING_BUFFERS 4
-#define PERIPHERAL_STATE_SENDING_FROM_BUFFER 5
-#define PERIPHERAL_STATE_SENDING_KEY_UP 6
+#define HID_STATE_OFFLINE 0
+#define HID_STATE_WAITING_FOR_CONNECTION 1
+#define HID_STATE_IDLE 2
+#define HID_STATE_BUSY 3
+#define HID_STATE_SENDING_FROM_BUFFER 4
+#define HID_STATE_SENDING_KEY_UP 5
 
-static uint8_t peripheral_state = PERIPHERAL_STATE_OFFLINE;
+// Caracter constants
+#define HID_CHAR_ILLEGAL 0xff
+#define HID_CHAR_RETURN '\n'
+#define HID_CHAR_ESCAPE 27
+#define HID_CHAR_TAB '\t'
+#define HID_CHAR_BACKSPACE 0x7f
 
-
-
-//--------------------------------------------------
-// BLE variables
-//--------------------------------------------------
+static uint8_t hid_state = HID_STATE_OFFLINE;
 static btstack_packet_callback_registration_t hci_event_callback_registration;
 static btstack_packet_callback_registration_t sm_event_callback_registration;
 static hci_con_handle_t con_handle = HCI_CON_HANDLE_INVALID;
@@ -62,7 +62,7 @@ static const uint8_t adv_data[] = {
 static const uint8_t adv_data_len = sizeof(adv_data);
 
 // from USB HID Specification 1.1, Appendix B.1
-static const uint8_t hid_descriptor_keyboard_boot_mode[] = {
+static const uint8_t hid_descriptor_boot_mode[] = {
 	/*
 	 Keyboard
 	 */
@@ -115,14 +115,60 @@ static const uint8_t hid_descriptor_keyboard_boot_mode[] = {
 
 	0xc0,							// End collection
 };
-static const uint8_t hid_descriptor_keyboard_boot_mode_len = sizeof(hid_descriptor_keyboard_boot_mode);
+static const uint8_t hid_descriptor_boot_mode_len = sizeof(hid_descriptor_boot_mode);
+
+/**
+ * English (US) - lowercase
+ */
+static const uint8_t hid_keytable_us [] = {
+	HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL,				/*   0-3 */
+	'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',									/*  4-13 */
+	'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',									/* 14-23 */
+	'u', 'v', 'w', 'x', 'y', 'z',														/* 24-29 */
+	'1', '2', '3', '4', '5', '6', '7', '8', '9', '0',									/* 30-39 */
+	HID_CHAR_RETURN, HID_CHAR_ESCAPE, HID_CHAR_BACKSPACE, HID_CHAR_TAB, ' ',			/* 40-44 */
+	'-', '=', '[', ']', '\\', HID_CHAR_ILLEGAL, ';', '\'', 0x60, ',',					/* 45-54 */
+	'.', '/', HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL,	/* 55-60 */
+	HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL,				/* 61-64 */
+	HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL,				/* 65-68 */
+	HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL,				/* 69-72 */
+	HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL,				/* 73-76 */
+	HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL,				/* 77-80 */
+	HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL,				/* 81-84 */
+	'*', '-', '+', '\n', '1', '2', '3', '4', '5',										/* 85-97 */
+	'6', '7', '8', '9', '0', '.', 0xa7,													/* 97-100 */
+};
+static const uint8_t hid_keytable_us_len = sizeof(hid_keytable_us);
+
+/**
+ * English (US) - uppercase
+ */
+static const uint8_t hid_keytable_us_shift[] = {
+	HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL,				/*  0-3  */
+	'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',									/*  4-13 */
+	'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',									/* 14-23 */
+	'U', 'V', 'W', 'X', 'Y', 'Z',														/* 24-29 */
+	'!', '@', '#', '$', '%', '^', '&', '*', '(', ')',									/* 30-39 */
+	HID_CHAR_RETURN, HID_CHAR_ESCAPE, HID_CHAR_BACKSPACE, HID_CHAR_TAB, ' ',			/* 40-44 */
+	'_', '+', '{', '}', '|', HID_CHAR_ILLEGAL, ':', '"', 0x7E, '<',						/* 45-54 */
+	'>', '?', HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL,	/* 55-60 */
+	HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL,				/* 61-64 */
+	HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL,				/* 65-68 */
+	HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL,				/* 69-72 */
+	HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL,				/* 73-76 */
+	HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL,				/* 77-80 */
+	HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL, HID_CHAR_ILLEGAL,				/* 81-84 */
+	'*', '-', '+', '\n', '1', '2', '3', '4', '5',										/* 85-97 */
+	'6', '7', '8', '9', '0', '.', 0xb1,													/* 97-100 */
+};
+static const uint8_t hid_keytable_us_shift_len = sizeof(hid_keytable_us_shift);
 
 
 
 //--------------------------------------------------
 // Websocket variables
 //--------------------------------------------------
-#define WS_EVENT_TIMER_INTERVAL 50
+#define WS_EVENT_TIMER_INTERVAL 25
 #define WS_BUFFER_TIMER_INTERVAL 50
 
 static const char *ws_http_port = "8000";
@@ -146,6 +192,7 @@ static btstack_ring_buffer_t ws_buffer_keycodes;
 
 // Timer for sending keystrokes from the buffer
 static btstack_timer_source_t ws_buffer_timer;
+
 
 
 //--------------------------------------------------
@@ -176,9 +223,9 @@ static bool in_array(uint8_t needle, uint8_t haystack[], uint8_t haystack_length
 /**
  * Setup method for the peripheral.
  */
-static void peripheral_setup(void) {
+static void hid_setup(void) {
 	l2cap_init();
-	l2cap_register_packet_handler(&peripheral_packet_handler);
+	l2cap_register_packet_handler(&hid_packet_handler);
 
 	// setup le device db
 	le_device_db_init();
@@ -198,7 +245,7 @@ static void peripheral_setup(void) {
 	device_information_service_server_init();
 
 	// setup HID Device service
-	hids_device_init(0, hid_descriptor_keyboard_boot_mode, hid_descriptor_keyboard_boot_mode_len);
+	hids_device_init(0, hid_descriptor_boot_mode, hid_descriptor_boot_mode_len);
 
 	// setup advertisements
 	uint16_t adv_int_min = 0x0030;
@@ -211,27 +258,27 @@ static void peripheral_setup(void) {
 	gap_advertisements_enable(1);
 
 	// register for HCI events
-	hci_event_callback_registration.callback = &peripheral_packet_handler;
+	hci_event_callback_registration.callback = &hid_packet_handler;
 	hci_add_event_handler(&hci_event_callback_registration);
 
 	// register for SM events
-	sm_event_callback_registration.callback = &peripheral_packet_handler;
+	sm_event_callback_registration.callback = &hid_packet_handler;
 	sm_add_event_handler(&sm_event_callback_registration);
 
 	// register for HIDS
-	hids_device_register_packet_handler(peripheral_packet_handler);
+	hids_device_register_packet_handler(hid_packet_handler);
 
 	// register for ATT
-	att_server_register_packet_handler(peripheral_packet_handler);
+	att_server_register_packet_handler(hid_packet_handler);
 }
 
 /**
  * Changes the peripheral state and logs this change
  * @param new_state The new state the peripheral should take.
  */
-static void peripheral_change_state(int new_state) {
-	printf("[Bluetooth driver]: State change from '%d' to '%d'\n", peripheral_state, new_state);
-	peripheral_state = new_state;
+static void hid_change_state(int new_state) {
+	printf("[BLE HID peripheral]: State change from '%d' to '%d'\n", hid_state, new_state);
+	hid_state = new_state;
 }
 
 /**
@@ -239,9 +286,55 @@ static void peripheral_change_state(int new_state) {
  * @param modifier The modifier to send (ALT/CTRL, etc.)
  * @param keycode The keycode in ASCII to send to the peripheral.
  */
-static void peripheral_send(uint8_t modifier, uint8_t keycode) {
-	uint8_t report[] = {modifier, 0, keycode, 0, 0, 0, 0, 0};
+static void hid_send(uint8_t modifier, uint8_t keycode) {
+	uint8_t report[] = { modifier, 0, keycode, 0, 0, 0, 0, 0 };
 	hids_device_send_input_report(con_handle, report, sizeof(report));
+}
+
+
+/**
+ * Performs a lookup for a certain character in a provided table and passed back the found keycode.
+ * @param character The character to find.
+ * @param table The table to look in.
+ * @param size The size of the table.
+ * @parm keycode The pointer to the keycode to set.
+ */
+static int hid_lookup_keycode(uint8_t character, const uint8_t * table, int size, uint8_t * keycode) {
+	int i;
+	for (i=0; i<size; i++) {
+		if (table[i] != character) {
+			continue;
+		}
+		*keycode = i;
+		return 1;
+	}
+	return 0;
+}
+
+/**
+ * Tries to find the modifier and the keycode from a certain character.
+ * @param character The character to find.
+ * @param keycode The pointer to the keycode to set.
+ * @param modifier The pointer to the modifier to set.
+ */
+static int hid_modifer_and_keycode_from_character(uint8_t character, uint8_t * modifier, uint8_t * keycode) {
+	int found;
+
+	// First search lowercase characters
+	found = hid_lookup_keycode(character, hid_keytable_us, hid_keytable_us_len, keycode);
+	if (found) {
+		*modifier = 0;  // none
+		return 1;
+	}
+
+	// Finally search uppercase characters
+	found = hid_lookup_keycode(character, hid_keytable_us_shift, hid_keytable_us_shift_len, keycode);
+	if (found) {
+		*modifier = 2;  // shift
+		return 1;
+	}
+
+	return 0;
 }
 
 /**
@@ -251,7 +344,7 @@ static void peripheral_send(uint8_t modifier, uint8_t keycode) {
  * @param packet The actual packet.
  * @param size The size of the received packet.
  */
-static void peripheral_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size) {
+static void hid_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size) {
 	UNUSED(channel);
 	UNUSED(size);
 
@@ -262,19 +355,19 @@ static void peripheral_packet_handler(uint8_t packet_type, uint16_t channel, uin
 
 	switch (hci_event_packet_get_type(packet)) {
 		case BTSTACK_EVENT_STATE: {
-			if ((btstack_event_state_get_state(packet) == HCI_STATE_WORKING) && (peripheral_state == PERIPHERAL_STATE_OFFLINE)) {
-				printf("[Bluetooth driver]: Online\n");
+			if ((btstack_event_state_get_state(packet) == HCI_STATE_WORKING) && (hid_state == HID_STATE_OFFLINE)) {
+				printf("[BLE HID peripheral]: Online\n");
 
 				// Move to 'waiting for connection state', this will disable clients to send data via websockets
-				peripheral_change_state(PERIPHERAL_STATE_WAITING_FOR_CONNECTION);
+				hid_change_state(HID_STATE_WAITING_FOR_CONNECTION);
 
 				// Turn on websocket server
 				websocket_setup();
 			}
 
-			if ((btstack_event_state_get_state(packet) == HCI_STATE_HALTING) && (peripheral_state != PERIPHERAL_STATE_OFFLINE)) {
-				peripheral_change_state(PERIPHERAL_STATE_OFFLINE);
-				printf("[Bluetooth driver]: Offline\n");
+			if ((btstack_event_state_get_state(packet) == HCI_STATE_HALTING) && (hid_state != HID_STATE_OFFLINE)) {
+				hid_change_state(HID_STATE_OFFLINE);
+				printf("[BLE HID peripheral]: Offline\n");
 
 				// Turn off websocket server
 				websocket_teardown();
@@ -282,7 +375,7 @@ static void peripheral_packet_handler(uint8_t packet_type, uint16_t channel, uin
 			break;
 		}
 		case SM_EVENT_JUST_WORKS_REQUEST: {
-			printf("[Bluetooth driver]: Pairing method 'Just Works' requested\n");
+			printf("[BLE HID peripheral]: Pairing method 'Just Works' requested\n");
 			sm_just_works_confirm(sm_event_just_works_request_get_handle(packet));
 			break;
 		}
@@ -290,22 +383,22 @@ static void peripheral_packet_handler(uint8_t packet_type, uint16_t channel, uin
 			// Required for initial pairing, to enable the websocket server
 			switch (sm_event_pairing_complete_get_status(packet)) {
 				case ERROR_CODE_SUCCESS: {
-					printf("[Bluetooth driver]: Pairing complete, success\n");
+					printf("[BLE HID peripheral]: Pairing complete, success\n");
 
 					// Set state to 'idle', this will enable clients to send data via websockets
-					peripheral_change_state(PERIPHERAL_STATE_IDLE);
+					hid_change_state(HID_STATE_IDLE);
 					break;
 				}
 				case ERROR_CODE_CONNECTION_TIMEOUT: {
-					printf("[Bluetooth driver]: Pairing failed, timeout\n");
+					printf("[BLE HID peripheral]: Pairing failed, timeout\n");
 					break;
 				}
 				case ERROR_CODE_REMOTE_USER_TERMINATED_CONNECTION: {
-					printf("[Bluetooth driver]: Pairing faileed, disconnected\n");
+					printf("[BLE HID peripheral]: Pairing faileed, disconnected\n");
 					break;
 				}
 				case ERROR_CODE_AUTHENTICATION_FAILURE: {
-					printf("[Bluetooth driver]: Pairing failed, reason = %u\n", sm_event_pairing_complete_get_reason(packet));
+					printf("[BLE HID peripheral]: Pairing failed, reason = %u\n", sm_event_pairing_complete_get_reason(packet));
 					break;
 				}
 				default: {
@@ -322,7 +415,7 @@ static void peripheral_packet_handler(uint8_t packet_type, uint16_t channel, uin
 
 					// print connection parameters (without using float operations)
 					conn_interval = hci_subevent_le_connection_complete_get_conn_interval(packet);
-					printf("[Bluetooth driver]: Client connection complete:\n");
+					printf("[BLE HID peripheral]: Client connection complete:\n");
 					printf("- Connection Interval: %u.%02u ms\n", conn_interval * 125 / 100, 25 * (conn_interval & 3));
 					printf("- Connection Latency: %u\n", hci_subevent_le_connection_complete_get_conn_latency(packet));
 
@@ -330,13 +423,13 @@ static void peripheral_packet_handler(uint8_t packet_type, uint16_t channel, uin
 					gap_request_connection_parameter_update(con_handle, 12, 12, 0, 0x0048);
 
 					// Set state to 'idle', this will enable clients to send data via websockets
-					peripheral_change_state(PERIPHERAL_STATE_IDLE);
+					hid_change_state(HID_STATE_IDLE);
 					break;
 				}
 				case HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE: {
 					// print connection parameters (without using float operations)
 					conn_interval = hci_subevent_le_connection_update_complete_get_conn_interval(packet);
-					printf("[Bluetooth driver]: Client connection update:\n");
+					printf("[BLE HID peripheral]: Client connection update:\n");
 					printf("- Connection Interval: %u.%02u ms\n", conn_interval * 125 / 100, 25 * (conn_interval & 3));
 					printf("- Connection Latency: %u\n", hci_subevent_le_connection_update_complete_get_conn_latency(packet));
 					break;
@@ -351,20 +444,20 @@ static void peripheral_packet_handler(uint8_t packet_type, uint16_t channel, uin
 			switch (hci_event_hids_meta_get_subevent_code(packet)) {
 				case HIDS_SUBEVENT_CAN_SEND_NOW: {
 					// Send the stored keycodes to the backend
-					if (peripheral_state == PERIPHERAL_STATE_BUSY) {
-						printf("[Bluetooth driver]: HIDS event can send now received:\n");
+					if (hid_state == HID_STATE_BUSY) {
+						printf("[BLE HID peripheral]: HIDS event can send now received:\n");
 						printf("- Sending modifier: %u\n", ws_send_modifier);
 						printf("- Sending keycode: %u\n", ws_send_keycode);
 
 						// Send the command
-						peripheral_send(ws_send_modifier, ws_send_keycode);
+						hid_send(ws_send_modifier, ws_send_keycode);
 
 						// Should we now send the key_up code?
 						if (ws_send_key_up == 1) {
 							ws_send_key_up = 0;
-							peripheral_change_state(PERIPHERAL_STATE_SENDING_KEY_UP);
+							hid_change_state(HID_STATE_SENDING_KEY_UP);
 						} else {
-							peripheral_change_state(PERIPHERAL_STATE_IDLE);
+							hid_change_state(HID_STATE_IDLE);
 						}
 					}
 					break;
@@ -376,10 +469,10 @@ static void peripheral_packet_handler(uint8_t packet_type, uint16_t channel, uin
 		}
 		case HCI_EVENT_DISCONNECTION_COMPLETE: {
 			con_handle = HCI_CON_HANDLE_INVALID;
-			printf("[Bluetooth driver]: Client disconnected\n");
+			printf("[BLE HID peripheral]: Client disconnected\n");
 
 			// Move to 'waiting for connection state', this will disable clients to send data via websockets
-			peripheral_change_state(PERIPHERAL_STATE_WAITING_FOR_CONNECTION);
+			hid_change_state(HID_STATE_WAITING_FOR_CONNECTION);
 			break;
 		}
 		default: {
@@ -401,7 +494,7 @@ static void websocket_setup(void) {
 	mg_mgr_init(&ws_mgr, NULL);
 	ws_nc = mg_bind(&ws_mgr, ws_http_port, websocket_event_handler);
 	mg_set_protocol_http_websocket(ws_nc);
-	ws_http_server_opts.document_root = ".";	// Serve current directory
+	ws_http_server_opts.document_root = "web_debug";	// Serve current directory
 	ws_http_server_opts.enable_directory_listing = "yes";
 
 	// Debug
@@ -438,7 +531,7 @@ static void websocket_event_poll(btstack_timer_source_t * ts) {
  */
 static void websocket_buffer_poll(btstack_timer_source_t * ts) {
 	// If we are idle...
-	if (peripheral_state == PERIPHERAL_STATE_IDLE) {
+	if (hid_state == HID_STATE_IDLE) {
 		uint32_t num_bytes_read;
 
 		// Try to read modifier from buffer
@@ -448,20 +541,20 @@ static void websocket_buffer_poll(btstack_timer_source_t * ts) {
 			btstack_ring_buffer_read(&ws_buffer_keycodes, &ws_send_keycode, 1, &num_bytes_read);
 
 			// And set the state to 'sending'
-			peripheral_change_state(PERIPHERAL_STATE_SENDING_FROM_BUFFER);
+			hid_change_state(HID_STATE_SENDING_FROM_BUFFER);
 			ws_send_key_up = 1;
 		}
 	}
 
 	// Or if we need to send the key_up event?
-	if (peripheral_state == PERIPHERAL_STATE_SENDING_KEY_UP) {
+	if (hid_state == HID_STATE_SENDING_KEY_UP) {
 		ws_send_modifier = 0;
 		ws_send_keycode = 0;
 	}
 
 	// If we have to send something, change the state to busy so the HIDS handler knows that we have to send something.
-	if ((peripheral_state == PERIPHERAL_STATE_SENDING_FROM_BUFFER) || (peripheral_state == PERIPHERAL_STATE_SENDING_KEY_UP)) {
-		peripheral_change_state(PERIPHERAL_STATE_BUSY);
+	if ((hid_state == HID_STATE_SENDING_FROM_BUFFER) || (hid_state == HID_STATE_SENDING_KEY_UP)) {
+		hid_change_state(HID_STATE_BUSY);
 
 		// Send event to keyboard that we want to send data
 		hids_device_request_can_send_now_event(con_handle);
@@ -471,6 +564,8 @@ static void websocket_buffer_poll(btstack_timer_source_t * ts) {
 	btstack_run_loop_set_timer(ts, WS_BUFFER_TIMER_INTERVAL);
 	btstack_run_loop_add_timer(ts);
 }
+
+
 
 /**
  * Event handler function, is called when a static file is requested, a client joins, a client sends a message and when a client disconnects.
@@ -494,78 +589,83 @@ static void websocket_event_handler(struct mg_connection *nc, int ev, void *ev_d
 	switch (ev) {
 		case MG_EV_WEBSOCKET_HANDSHAKE_DONE: {
 			// Client connected, tell everybody.
-			websocket_broadcast(nc, mg_mk_str("connected."));
+			websocket_broadcast(nc, mg_mk_str("connected."), true);
 			break;
 		}
 		case MG_EV_WEBSOCKET_FRAME: {
-			if (peripheral_state == PERIPHERAL_STATE_WAITING_FOR_CONNECTION) {
-				websocket_broadcast(nc, mg_mk_str("Error - No client is currently paired with the HID peripheral. Please check the documentation."));
-				break;
-			}
 			struct websocket_message *wm = (struct websocket_message *) ev_data;
 			char buffer[wm->size];
 			sprintf(buffer, "%.*s", (uint8_t) wm->size, (char *) wm->data);
 
 			// Broadcast what we recieved
 			char debug[512];
-			sprintf(debug, "Received: '%s'", buffer);
-			websocket_broadcast(nc, mg_mk_str(debug));
+			sprintf(debug, "sent: '%s'", buffer);
+			websocket_broadcast(nc, mg_mk_str(debug), true);
 
-			// We allow a max length of 7 (<modifier:3>,<keycode:3>)
-			if (strlen(buffer) <= 7) {
-				int modifier = 0;
-				int keycode = 0;
-				bool valid_input = false;
+			// Initialize variables
+			bool valid_input = false;
+			int modifier = 0;
+			int keycode = 0;
+			uint8_t modifier_ = 0;
+			uint8_t keycode_ = 0;
 
-				// Is there a comma present?
-				if (strchr(buffer, ',') != NULL) {
-					// Parse modifier & keycode
-					valid_input = (sscanf(buffer, "%d,%d", &modifier, &keycode) == 2);
-
-					// Check if the modifier was valid
-					uint8_t allowed_modifiers[9] = {0, 1, 2, 4, 8, 16, 32, 64, 128};
-					if (valid_input && !in_array(modifier, allowed_modifiers, 9)) {
-						valid_input = false;
-					}
-				} else {
-					// Parse modifier & keycode
-					valid_input = (sscanf(buffer, "%d", &keycode) == 1);
-				}
-
-				// Check keycode
-				if (keycode > 255) {
-					valid_input = false;
-				}
-
-				// Check to see if we have valid input
-				if (!valid_input) {
-					websocket_broadcast(nc, mg_mk_str("- Invalid message detected. Please check the documentation."));
-				} else {
-					// Change state so that timer could not take something from one of the buffers while it is not ready yet
-					peripheral_change_state(PERIPHERAL_STATE_FILLING_BUFFERS);
-
-					// Write data to buffers
-					uint8_t modifier_ = modifier;
-					btstack_ring_buffer_write(&ws_buffer_modifiers, &modifier_, 1);
-
-					uint8_t keycode_ = keycode;
-					btstack_ring_buffer_write(&ws_buffer_keycodes, &keycode_, 1);
-
-					// Change state back so that timer CAN take something from the buffers
-					peripheral_change_state(PERIPHERAL_STATE_IDLE);
-
-					// Broadcast
-					sprintf(debug, "- Found modifier '%d' and keycode '%d'.", modifier, keycode);
-					websocket_broadcast(nc, mg_mk_str(debug));
+			// In case we received just 1 char
+			if (strlen(buffer) == 1) {
+				// Try to lookup the character int they keymap(s).
+				if (hid_modifer_and_keycode_from_character(buffer[0], &modifier_, &keycode_) == 1) {
+					valid_input = true;
 				}
 			} else {
-				websocket_broadcast(nc, mg_mk_str("- Invalid message detected. Please check the documentation."));
+				// In other cases we allow a max length of 7 (<modifier:3>,<keycode:3>)
+				if (strlen(buffer) <= 7) {
+					// Is there a comma present?
+					if (strchr(buffer, ',') != NULL) {
+						// Parse modifier & keycode
+						valid_input = (sscanf(buffer, "%d,%d", &modifier, &keycode) == 2);
+
+						// Check if the modifier was valid
+						uint8_t allowed_modifiers[9] = {0, 1, 2, 4, 8, 16, 32, 64, 128};
+						if (valid_input && !in_array(modifier, allowed_modifiers, 9)) {
+							valid_input = false;
+						}
+					} else {
+						// Parse modifier & keycode
+						valid_input = (sscanf(buffer, "%d", &keycode) == 1);
+					}
+
+					// Check keycode
+					if (keycode > 255) {
+						valid_input = false;
+					}
+
+					if (valid_input) {
+						modifier_ = modifier;
+						keycode_ = keycode;
+					}
+				}
+			}
+
+			// Check to see if we have valid input
+			if (!valid_input) {
+				websocket_broadcast(nc, mg_mk_str("- Hold up! Invalid message detected, please check the documentation."), false);
+			} else {
+				// Broadcast
+				sprintf(debug, "- Found modifier '%d' and keycode '%d'.", modifier_, keycode_);
+				websocket_broadcast(nc, mg_mk_str(debug), false);
+
+				if (hid_state == HID_STATE_WAITING_FOR_CONNECTION) {
+					websocket_broadcast(nc, mg_mk_str("- Hold up! No client is currently paired, please check the documentation."), false);
+				} else {
+					// Write data to buffers
+					btstack_ring_buffer_write(&ws_buffer_modifiers, &modifier_, 1);
+					btstack_ring_buffer_write(&ws_buffer_keycodes, &keycode_, 1);
+				}
 			}
 			break;
 		}
 		case MG_EV_CLOSE: {
 			// Client disconnected, tell everybody.
-			websocket_broadcast(nc, mg_mk_str("disconnected."));
+			websocket_broadcast(nc, mg_mk_str("disconnected."), true);
 			break;
 		}
 	}
@@ -575,8 +675,9 @@ static void websocket_event_handler(struct mg_connection *nc, int ev, void *ev_d
  * Broadcast a message to all connected clients. This is mainly used for debug logging.
  * @param mg_connection The connection initiating the broadcast
  * @param mg_str The message we want to broadcast
+ * @param send_to_all If false, only sends to the originating client
  */
-static void websocket_broadcast(struct mg_connection *nc, const struct mg_str msg) {
+static void websocket_broadcast(struct mg_connection *nc, const struct mg_str msg, bool send_to_all) {
 	char addr[32];
 	mg_sock_addr_to_str(&nc->sa, addr, sizeof(addr), MG_SOCK_STRINGIFY_IP | MG_SOCK_STRINGIFY_PORT);
 
@@ -590,8 +691,10 @@ static void websocket_broadcast(struct mg_connection *nc, const struct mg_str ms
 	// Send to all connected clients
 	struct mg_connection *c;
 	for (c = mg_next(nc->mgr, NULL); c != NULL; c = mg_next(nc->mgr, c)) {
-		// Don't send to the sender.
-		// if (c == nc) continue;
+		// If we are just sending a reply to one client, don't send it to all.
+		if ((send_to_all == false) && (c != nc)) {
+			continue;
+		}
 		mg_send_websocket_frame(c, WEBSOCKET_OP_TEXT, buf, strlen(buf));
 	}
 }
@@ -600,7 +703,7 @@ static void websocket_broadcast(struct mg_connection *nc, const struct mg_str ms
  * Destructor for the WebSocket server
  */
 static void websocket_teardown(void) {
-	websocket_broadcast(ws_nc, mg_mk_str("Server going down!"));
+	websocket_broadcast(ws_nc, mg_mk_str("Server going down!"), true);
 	mg_mgr_free(&ws_mgr);
 	printf("[WebSocket server]: Stopped.\n");
 }
@@ -612,7 +715,7 @@ static void websocket_teardown(void) {
 //--------------------------------------------------
 uint8_t btstack_main(void) {
 	// Setup BLE peripheral
-	peripheral_setup();
+	hid_setup();
 
 	// Initialize ringbuffers
 	btstack_ring_buffer_init(&ws_buffer_modifiers, ws_storage_modifiers, sizeof(ws_storage_modifiers));

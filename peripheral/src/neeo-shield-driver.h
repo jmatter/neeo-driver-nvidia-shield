@@ -25,20 +25,37 @@ static bool in_array(uint8_t needle, uint8_t haystack[], uint8_t haystack_length
 /**
  * Setup method for the peripheral.
  */
-static void peripheral_setup(void);
+static void hid_setup(void);
 
 /**
  * Changes the peripheral state and logs this change
  * @param new_state The new state the peripheral should take.
  */
-static void peripheral_change_state(int new_state);
+static void hid_change_state(int new_state);
 
 /**
  * Used to send data to the peripheral.
  * @param modifier The modifier to send (ALT/CTRL, etc.)
  * @param keycode The keycode in ASCII to send to the peripheral.
  */
-static void peripheral_send(uint8_t modifier, uint8_t keycode);
+static void hid_send(uint8_t modifier, uint8_t keycode);
+
+/**
+ * Performs a lookup for a certain character in a provided table and passed back the found keycode.
+ * @param character The character to find.
+ * @param table The table to look in.
+ * @param size The size of the table.
+ * @parm keycode The pointer to the keycode to set.
+ */
+static int hid_lookup_keycode(uint8_t character, const uint8_t * table, int size, uint8_t * keycode);
+
+/**
+ * Tries to find the modifier and the keycode from a certain character.
+ * @param character The character to find.
+ * @param keycode The pointer to the keycode to set.
+ * @param modifier The pointer to the modifier to set.
+ */
+static int hid_modifer_and_keycode_from_character(uint8_t character, uint8_t * modifier, uint8_t * keycode);
 
 /**
  * Handles received bluetooth packets (callback function).
@@ -47,7 +64,7 @@ static void peripheral_send(uint8_t modifier, uint8_t keycode);
  * @param packet The actual packet.
  * @param size The size of the received packet.
  */
-static void peripheral_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size);
+static void hid_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size);
 
 
 
@@ -82,8 +99,9 @@ static void websocket_event_handler(struct mg_connection *nc, int ev, void *ev_d
  * Broadcast a message to all connected clients. This is mainly used for debug logging.
  * @param mg_connection The connection initiating the broadcast
  * @param mg_str The message we want to broadcast
+ * @param send_to_all If false, only sends to the originating client 
  */
-static void websocket_broadcast(struct mg_connection *nc, const struct mg_str msg);
+static void websocket_broadcast(struct mg_connection *nc, const struct mg_str msg, bool send_to_all);
 
 /**
  * Destructor for the websocket server
