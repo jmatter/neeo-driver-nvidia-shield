@@ -46,7 +46,7 @@ if grep -q 'BTSTACK_ROOT = ../..' ./peripheral/assets/btstack/port/libusb/Makefi
 fi
 
 echo '- (re)Compiling "ws-ble-hid" ...';
-cd ./peripheral/src && make ws-ble-hid
+cd ./peripheral/src && make
 if [ $? == 1 ]; then
 	echo '  - Error building btstack, exiting!'
 	exit 1
