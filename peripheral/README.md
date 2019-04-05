@@ -1,5 +1,5 @@
-# Debugger
-This page shows the log of the websocket webserver, running on the HID peripheral. This page has an auto-reconnecting websocket implementation and 2 possiblities to send data to the peripheral.
+# Peripheral
+The web_debug folder is served by the websocket webserver, running on the HID peripheral. This page has an auto-reconnecting websocket implementation and 2 possiblities to send data to the peripheral.
 
 ## Option 1 - send a modifier and keycode.
 In case you already know the modifier and keycode, you can send them using the box on the left. The format is "<modifier>,<keycode>", where modifier is one of these codes:
