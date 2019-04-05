@@ -49,6 +49,9 @@ static btstack_packet_callback_registration_t hci_event_callback_registration;
 static btstack_packet_callback_registration_t sm_event_callback_registration;
 static hci_con_handle_t con_handle = HCI_CON_HANDLE_INVALID;
 
+static bool hid_has_boot_report = false;
+static bool hid_has_input_report = false;
+
 static const uint8_t adv_data[] = {
 	// Flags general discoverable, BR/EDR not supported
 	0x02, BLUETOOTH_DATA_TYPE_FLAGS, 0x06,
@@ -168,8 +171,8 @@ static const uint8_t hid_keytable_us_shift_len = sizeof(hid_keytable_us_shift);
 //--------------------------------------------------
 // Websocket variables
 //--------------------------------------------------
-#define WS_EVENT_TIMER_INTERVAL 25
-#define WS_BUFFER_TIMER_INTERVAL 50
+#define WS_EVENT_TIMER_INTERVAL 20
+#define WS_BUFFER_TIMER_INTERVAL 40
 
 static const char *ws_http_port = "8000";
 static struct mg_serve_http_opts ws_http_server_opts;
@@ -182,12 +185,12 @@ static btstack_timer_source_t ws_event_timer;
 // Buffer for modifiers
 static uint8_t ws_send_key_up = 0;
 static uint8_t ws_send_modifier = 0;
-static uint8_t ws_storage_modifiers[20];
+static uint8_t ws_storage_modifiers[64];
 static btstack_ring_buffer_t ws_buffer_modifiers;
 
 // Buffer for keycodes
 static uint8_t ws_send_keycode = 0;
-static uint8_t ws_storage_keycodes[20];
+static uint8_t ws_storage_keycodes[64];
 static btstack_ring_buffer_t ws_buffer_keycodes;
 
 // Timer for sending keystrokes from the buffer
@@ -225,7 +228,6 @@ static bool in_array(uint8_t needle, uint8_t haystack[], uint8_t haystack_length
  */
 static void hid_setup(void) {
 	l2cap_init();
-	//l2cap_register_packet_handler(&hid_packet_handler);
 
 	// setup le device db
 	le_device_db_init();
@@ -267,9 +269,6 @@ static void hid_setup(void) {
 
 	// register for HIDS
 	hids_device_register_packet_handler(hid_packet_handler);
-
-	// register for ATT
-	//att_server_register_packet_handler(hid_packet_handler);
 }
 
 /**
@@ -421,9 +420,6 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 
 					// request min con interval 15 ms for iOS 11+
 					gap_request_connection_parameter_update(con_handle, 12, 12, 0, 0x0048);
-
-					// Set state to 'idle', this will enable clients to send data via websockets
-					hid_change_state(HID_STATE_IDLE);
 					break;
 				}
 				case HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE: {
@@ -440,13 +436,21 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 		case HCI_EVENT_HIDS_META: {
 			switch (hci_event_hids_meta_get_subevent_code(packet)) {
 				case HIDS_SUBEVENT_INPUT_REPORT_ENABLE: {
-					con_handle = hids_subevent_input_report_enable_get_con_handle(packet);
-					printf("[BLE HID peripheral]: Report Characteristic Subscribed %u\n", hids_subevent_input_report_enable_get_enable(packet));
+					if (hid_has_input_report == false) {
+						hid_has_input_report = true;
+
+						con_handle = hids_subevent_input_report_enable_get_con_handle(packet);
+						printf("[BLE HID peripheral]: Report Characteristic Subscribed %u\n", hids_subevent_input_report_enable_get_enable(packet));
+					}
 					break;
 				}
 				case HIDS_SUBEVENT_BOOT_KEYBOARD_INPUT_REPORT_ENABLE: {
-					con_handle = hids_subevent_input_report_enable_get_con_handle(packet);
-					printf("[BLE HID peripheral]: Boot Keyboard Characteristic Subscribed %u\n", hids_subevent_boot_keyboard_input_report_enable_get_enable(packet));
+					if (hid_has_boot_report == false) {
+						hid_has_boot_report = true;
+
+						con_handle = hids_subevent_boot_keyboard_input_report_enable_get_con_handle(packet);
+						printf("[BLE HID peripheral]: Boot Keyboard Characteristic Subscribed %u\n", hids_subevent_boot_keyboard_input_report_enable_get_enable(packet));
+					}
 					break;
 				}
 				case HIDS_SUBEVENT_PROTOCOL_MODE: {
@@ -480,6 +484,10 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 			if (hid_state > HID_STATE_OFFLINE) {
 				con_handle = HCI_CON_HANDLE_INVALID;
 				printf("[BLE HID peripheral]: Client disconnected\n");
+
+				// Reset HID report
+				hid_has_boot_report = false;
+				hid_has_input_report = false;
 
 				// Move to 'waiting for connection state', this will disable clients to send data via websockets
 				hid_change_state(HID_STATE_WAITING_FOR_CONNECTION);
