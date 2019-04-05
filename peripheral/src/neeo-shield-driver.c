@@ -225,7 +225,7 @@ static bool in_array(uint8_t needle, uint8_t haystack[], uint8_t haystack_length
  */
 static void hid_setup(void) {
 	l2cap_init();
-	l2cap_register_packet_handler(&hid_packet_handler);
+	//l2cap_register_packet_handler(&hid_packet_handler);
 
 	// setup le device db
 	le_device_db_init();
@@ -269,7 +269,7 @@ static void hid_setup(void) {
 	hids_device_register_packet_handler(hid_packet_handler);
 
 	// register for ATT
-	att_server_register_packet_handler(hid_packet_handler);
+	//att_server_register_packet_handler(hid_packet_handler);
 }
 
 /**
@@ -277,8 +277,10 @@ static void hid_setup(void) {
  * @param new_state The new state the peripheral should take.
  */
 static void hid_change_state(int new_state) {
-	printf("[BLE HID peripheral]: State change from '%d' to '%d'\n", hid_state, new_state);
-	hid_state = new_state;
+	if (new_state != hid_state) {
+		printf("[BLE HID peripheral]: State change from '%d' to '%d'\n", hid_state, new_state);
+		hid_state = new_state;
+	}
 }
 
 /**
@@ -348,8 +350,9 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 	UNUSED(channel);
 	UNUSED(size);
 
-	if (packet_type != HCI_EVENT_PACKET)
-	return;
+	if (packet_type != HCI_EVENT_PACKET) {
+		return;
+	}
 
 	uint16_t conn_interval;
 
@@ -401,9 +404,6 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 					printf("[BLE HID peripheral]: Pairing failed, reason = %u\n", sm_event_pairing_complete_get_reason(packet));
 					break;
 				}
-				default: {
-					break;
-				}
 			}
 			break;
 		}
@@ -416,8 +416,8 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 					// print connection parameters (without using float operations)
 					conn_interval = hci_subevent_le_connection_complete_get_conn_interval(packet);
 					printf("[BLE HID peripheral]: Client connection complete:\n");
-					printf("- Connection Interval: %u.%02u ms\n", conn_interval * 125 / 100, 25 * (conn_interval & 3));
-					printf("- Connection Latency: %u\n", hci_subevent_le_connection_complete_get_conn_latency(packet));
+					printf("[BLE HID peripheral]: - Connection Interval: %u.%02u ms\n", conn_interval * 125 / 100, 25 * (conn_interval & 3));
+					printf("[BLE HID peripheral]: - Connection Latency: %u\n", hci_subevent_le_connection_complete_get_conn_latency(packet));
 
 					// request min con interval 15 ms for iOS 11+
 					gap_request_connection_parameter_update(con_handle, 12, 12, 0, 0x0048);
@@ -430,11 +430,8 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 					// print connection parameters (without using float operations)
 					conn_interval = hci_subevent_le_connection_update_complete_get_conn_interval(packet);
 					printf("[BLE HID peripheral]: Client connection update:\n");
-					printf("- Connection Interval: %u.%02u ms\n", conn_interval * 125 / 100, 25 * (conn_interval & 3));
-					printf("- Connection Latency: %u\n", hci_subevent_le_connection_update_complete_get_conn_latency(packet));
-					break;
-				}
-				default: {
+					printf("[BLE HID peripheral]: - Connection Interval: %u.%02u ms\n", conn_interval * 125 / 100, 25 * (conn_interval & 3));
+					printf("[BLE HID peripheral]: - Connection Latency: %u\n", hci_subevent_le_connection_update_complete_get_conn_latency(packet));
 					break;
 				}
 			}
@@ -442,12 +439,26 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 		}
 		case HCI_EVENT_HIDS_META: {
 			switch (hci_event_hids_meta_get_subevent_code(packet)) {
+				case HIDS_SUBEVENT_INPUT_REPORT_ENABLE: {
+					con_handle = hids_subevent_input_report_enable_get_con_handle(packet);
+					printf("[BLE HID peripheral]: Report Characteristic Subscribed %u\n", hids_subevent_input_report_enable_get_enable(packet));
+					break;
+				}
+				case HIDS_SUBEVENT_BOOT_KEYBOARD_INPUT_REPORT_ENABLE: {
+					con_handle = hids_subevent_input_report_enable_get_con_handle(packet);
+					printf("[BLE HID peripheral]: Boot Keyboard Characteristic Subscribed %u\n", hids_subevent_boot_keyboard_input_report_enable_get_enable(packet));
+					break;
+				}
+				case HIDS_SUBEVENT_PROTOCOL_MODE: {
+					printf("[BLE HID peripheral]: Protocol Mode: %s mode\n", hids_subevent_protocol_mode_get_protocol_mode(packet) ? "Report" : "Boot");
+					break;
+				}
 				case HIDS_SUBEVENT_CAN_SEND_NOW: {
 					// Send the stored keycodes to the backend
 					if (hid_state == HID_STATE_BUSY) {
 						printf("[BLE HID peripheral]: HIDS event can send now received:\n");
-						printf("- Sending modifier: %u\n", ws_send_modifier);
-						printf("- Sending keycode: %u\n", ws_send_keycode);
+						printf("[BLE HID peripheral]: - Sending modifier: %u\n", ws_send_modifier);
+						printf("[BLE HID peripheral]: - Sending keycode: %u\n", ws_send_keycode);
 
 						// Send the command
 						hid_send(ws_send_modifier, ws_send_keycode);
@@ -462,20 +473,17 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 					}
 					break;
 				}
-				default: {
-					break;
-				}
 			}
-		}
-		case HCI_EVENT_DISCONNECTION_COMPLETE: {
-			con_handle = HCI_CON_HANDLE_INVALID;
-			printf("[BLE HID peripheral]: Client disconnected\n");
-
-			// Move to 'waiting for connection state', this will disable clients to send data via websockets
-			hid_change_state(HID_STATE_WAITING_FOR_CONNECTION);
 			break;
 		}
-		default: {
+		case HCI_EVENT_DISCONNECTION_COMPLETE: {
+			if (hid_state > HID_STATE_OFFLINE) {
+				con_handle = HCI_CON_HANDLE_INVALID;
+				printf("[BLE HID peripheral]: Client disconnected\n");
+
+				// Move to 'waiting for connection state', this will disable clients to send data via websockets
+				hid_change_state(HID_STATE_WAITING_FOR_CONNECTION);
+			}
 			break;
 		}
 	}
