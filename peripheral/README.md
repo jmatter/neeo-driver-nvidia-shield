@@ -18,10 +18,10 @@ The keycode is an numeric representation of a keycode between 1 and 255; for ins
 As an alternative, keycodes can be found in the sourcecode of the peripheral, e.g. an 'a' is "0,4" (no modifier, key is 4) and an 'A' is "2,4" (shift modifier, key is 4).
 
 Specific commands for the Android Shield TV are (with modifier "0" unless otherwise mentioned):
-  - Left          (80) / (92)
-  - Right         (79) / (94)
-  - Up            (82) / (96)
-  - Down          (81) / (90)
+  - Left          (92)
+  - Right         (94)
+  - Up            (96)
+  - Down          (90)
   - Select        (40)
   - Back          (41)
   - Home          (1,41)

@@ -441,6 +441,9 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 
 						con_handle = hids_subevent_input_report_enable_get_con_handle(packet);
 						printf("[BLE HID peripheral]: Report Characteristic Subscribed %u\n", hids_subevent_input_report_enable_get_enable(packet));
+
+						// Set state to 'idle', this will enable clients to send data via websockets
+						hid_change_state(HID_STATE_IDLE);
 					}
 					break;
 				}
