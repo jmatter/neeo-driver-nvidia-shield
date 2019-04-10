@@ -15,6 +15,7 @@ label {
 }
 
 #messages {
+	font-family: Monospace;
 	border: 1px solid #999;
 	height: 20em;
 	overflow: scroll;
