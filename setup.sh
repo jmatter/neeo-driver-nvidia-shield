@@ -5,8 +5,12 @@ SETUP_DIR=`pwd`
 echo '---------------------'
 echo 'Setting up peripheral'
 echo '---------------------'
+echo
 echo 'Please note: this setup script is tested on a Pi 3B with attached USB BLE adapter..'
 echo
+echo 'Starting with setup in 5 seconds...'
+echo
+sleep 5
 
 if [ ! -d "peripheral/src/assets" ]; then
 	mkdir peripheral/src/assets
@@ -47,6 +51,7 @@ if [ ! -d "peripheral/src/assets/mongoose" ]; then
 fi
 
 echo '- (re)Compiling ...';
+echo
 cd ./peripheral/src && make
 if [ $? == 1 ]; then
 	echo '  - Error building btstack, exiting!'
