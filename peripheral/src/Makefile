@@ -10,7 +10,7 @@ include ${PORT_DIR}/Makefile
 # Add the 'port' directory for searching missing stuff
 VPATH+= ${PORT_DIR}
 CFLAGS+= -I${PORT_DIR}
-CFLAGS+= -I../assets/mongoose
+CFLAGS+= -I${MONGOOSE_DIR}
 CFLAGS+= -DMG_ENABLE_FILESYSTEM=1
 
 # Setup sources for dependencies
