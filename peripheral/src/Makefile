@@ -1,15 +1,15 @@
 # Settings
-PORT_DIR = ../assets/btstack/port/libusb
+BTSTACK_DIR = ../assets/btstack/port/libusb
 MONGOOSE_DIR = ../assets/mongoose
 
 .DEFAULT_GOAL := neeo-shield-driver
 
 # Include correct Makefile for the required settings
-include ${PORT_DIR}/Makefile
+include ${BTSTACK_DIR}/Makefile
 
 # Add the 'port' directory for searching missing stuff
-VPATH+= ${PORT_DIR}
-CFLAGS+= -I${PORT_DIR}
+VPATH+= ${BTSTACK_DIR}
+CFLAGS+= -I${BTSTACK_DIR}
 CFLAGS+= -I${MONGOOSE_DIR}
 CFLAGS+= -DMG_ENABLE_FILESYSTEM=1
 
