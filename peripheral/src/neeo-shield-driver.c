@@ -171,8 +171,7 @@ static const uint8_t hid_keytable_us_shift_len = sizeof(hid_keytable_us_shift);
 //--------------------------------------------------
 // Websocket variables
 //--------------------------------------------------
-#define WS_EVENT_TIMER_INTERVAL 20
-#define WS_BUFFER_TIMER_INTERVAL 40
+#define WS_EVENT_TIMER_INTERVAL 24
 
 static const char *ws_http_port = "8000";
 static struct mg_serve_http_opts ws_http_server_opts;
@@ -183,18 +182,12 @@ static struct mg_connection *ws_nc;
 static btstack_timer_source_t ws_event_timer;
 
 // Buffer for modifiers
-static uint8_t ws_send_key_up = 0;
-static uint8_t ws_send_modifier = 0;
-static uint8_t ws_storage_modifiers[64];
+static uint8_t ws_storage_modifiers[128];
 static btstack_ring_buffer_t ws_buffer_modifiers;
 
 // Buffer for keycodes
-static uint8_t ws_send_keycode = 0;
-static uint8_t ws_storage_keycodes[64];
+static uint8_t ws_storage_keycodes[128];
 static btstack_ring_buffer_t ws_buffer_keycodes;
-
-// Timer for sending keystrokes from the buffer
-static btstack_timer_source_t ws_buffer_timer;
 
 
 
@@ -288,7 +281,7 @@ static void hid_change_state(int new_state) {
  * @param keycode The keycode in ASCII to send to the peripheral.
  */
 static void hid_send(uint8_t modifier, uint8_t keycode) {
-	uint8_t report[] = { modifier, 0, keycode, 0, 0, 0, 0, 0 };
+	uint8_t report[] = { /* 0xa1, */ modifier, 0, 0, keycode, 0, 0, 0, 0, 0};
 	hids_device_send_input_report(con_handle, report, sizeof(report));
 }
 
@@ -461,21 +454,45 @@ static void hid_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 					break;
 				}
 				case HIDS_SUBEVENT_CAN_SEND_NOW: {
-					// Send the stored keycodes to the backend
-					if (hid_state == HID_STATE_BUSY) {
-						printf("[BLE HID peripheral]: HIDS event can send now received:\n");
-						printf("[BLE HID peripheral]: - Sending modifier: %u\n", ws_send_modifier);
-						printf("[BLE HID peripheral]: - Sending keycode: %u\n", ws_send_keycode);
+					printf("[BLE HID peripheral]: HIDS event can send now received:\n");
+					switch (hid_state) {
+						case HID_STATE_BUSY: {
+							uint32_t num_bytes_read;
+							uint8_t ws_send_modifier = 0;
+							uint8_t ws_send_keycode = 0;
 
-						// Send the command
-						hid_send(ws_send_modifier, ws_send_keycode);
+							// Try to read modifier from buffer
+							btstack_ring_buffer_read(&ws_buffer_modifiers, &ws_send_modifier, 1, &num_bytes_read);
+							if (num_bytes_read == 0) {
+								hid_change_state(HID_STATE_IDLE);
+								break;
+							}
 
-						// Should we now send the key_up code?
-						if (ws_send_key_up == 1) {
-							ws_send_key_up = 0;
+							// If that succeeds we also read the keycode to send
+							btstack_ring_buffer_read(&ws_buffer_keycodes, &ws_send_keycode, 1, &num_bytes_read);
+
+							// And set the state to 'sending'
+							printf("[BLE HID peripheral]: - Sending modifier: %u\n", ws_send_modifier);
+							printf("[BLE HID peripheral]: - Sending keycode: %u\n", ws_send_keycode);
+							hid_send(ws_send_modifier, ws_send_keycode);
+
+							// Wait for callback to send key-up event
 							hid_change_state(HID_STATE_SENDING_KEY_UP);
-						} else {
-							hid_change_state(HID_STATE_IDLE);
+							hids_device_request_can_send_now_event(con_handle);
+							break;
+						}
+						case HID_STATE_SENDING_KEY_UP: {
+							printf("[BLE HID peripheral]: - Sending keyup event\n");
+							hid_send(0, 0);
+
+							// In case we have still bytes available, make the call so that we will process the next ones asap.
+							if (btstack_ring_buffer_bytes_available(&ws_buffer_modifiers)) {
+								hid_change_state(HID_STATE_BUSY);
+								hids_device_request_can_send_now_event(con_handle);
+							} else {
+								hid_change_state(HID_STATE_IDLE);
+							}
+							break;
 						}
 					}
 					break;
@@ -523,14 +540,6 @@ static void websocket_setup(void) {
 	ws_event_timer.process = &websocket_event_poll;
 	btstack_run_loop_set_timer(&ws_event_timer, WS_EVENT_TIMER_INTERVAL);
 	btstack_run_loop_add_timer(&ws_event_timer);
-	//printf("- Started 'ws_event_timer' timer with %uMs interval\n", WS_EVENT_TIMER_INTERVAL);
-
-	// Setup buffer typing timer
-	ws_buffer_timer.process = &websocket_buffer_poll;
-	btstack_run_loop_set_timer(&ws_buffer_timer, WS_BUFFER_TIMER_INTERVAL);
-	btstack_run_loop_add_timer(&ws_buffer_timer);
-	//printf("- Started 'ws_buffer_timer' timer with %uMs interval\n", WS_BUFFER_TIMER_INTERVAL);
-
 }
 
 /**
@@ -543,48 +552,6 @@ static void websocket_event_poll(btstack_timer_source_t * ts) {
 	btstack_run_loop_set_timer(ts, WS_EVENT_TIMER_INTERVAL);
 	btstack_run_loop_add_timer(ts);
 }
-
-/**
- * Method which handles the reading of the buffer and sending it via HID if enabled.
- * taken from https://github.com/bluekitchen/btstack/blob/master/example/hog_keyboard_demo.c#L276
- */
-static void websocket_buffer_poll(btstack_timer_source_t * ts) {
-	// If we are idle...
-	if (hid_state == HID_STATE_IDLE) {
-		uint32_t num_bytes_read;
-
-		// Try to read modifier from buffer
-		btstack_ring_buffer_read(&ws_buffer_modifiers, &ws_send_modifier, 1, &num_bytes_read);
-		if (num_bytes_read == 1) {
-			// If that succeeds we also read the keycode to send
-			btstack_ring_buffer_read(&ws_buffer_keycodes, &ws_send_keycode, 1, &num_bytes_read);
-
-			// And set the state to 'sending'
-			hid_change_state(HID_STATE_SENDING_FROM_BUFFER);
-			ws_send_key_up = 1;
-		}
-	}
-
-	// Or if we need to send the key_up event?
-	if (hid_state == HID_STATE_SENDING_KEY_UP) {
-		ws_send_modifier = 0;
-		ws_send_keycode = 0;
-	}
-
-	// If we have to send something, change the state to busy so the HIDS handler knows that we have to send something.
-	if ((hid_state == HID_STATE_SENDING_FROM_BUFFER) || (hid_state == HID_STATE_SENDING_KEY_UP)) {
-		hid_change_state(HID_STATE_BUSY);
-
-		// Send event to keyboard that we want to send data
-		hids_device_request_can_send_now_event(con_handle);
-	}
-
-	// Keep running this timer until we are ready
-	btstack_run_loop_set_timer(ts, WS_BUFFER_TIMER_INTERVAL);
-	btstack_run_loop_add_timer(ts);
-}
-
-
 
 /**
  * Event handler function, is called when a static file is requested, a client joins, a client sends a message and when a client disconnects.
@@ -678,6 +645,15 @@ static void websocket_event_handler(struct mg_connection *nc, int ev, void *ev_d
 					// Write data to buffers
 					btstack_ring_buffer_write(&ws_buffer_modifiers, &modifier_, 1);
 					btstack_ring_buffer_write(&ws_buffer_keycodes, &keycode_, 1);
+
+					// Call event to send data
+					if (hid_state == HID_STATE_IDLE) {
+						// We have a winner!
+						hid_change_state(HID_STATE_BUSY);
+
+						// Send the key as soon as possible.
+						hids_device_request_can_send_now_event(con_handle);
+					}
 				}
 			}
 			break;

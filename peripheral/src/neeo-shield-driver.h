@@ -83,11 +83,6 @@ static void websocket_setup(void);
 static void websocket_event_poll(btstack_timer_source_t * ts);
 
 /**
- * Method which handles the reading of the buffer and sending it via HID if enabled.
- */
-static void websocket_buffer_poll(btstack_timer_source_t * ts);
-
-/**
  * Event handler function, is called when a static file is requested, a client joins, a client sends a message and when a client disconnects.
  * @param mg_connection The connection initiating the event
  * @param ev The event ID

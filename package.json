@@ -8,7 +8,8 @@
     "bluebird": "^3.5.2",
     "config": "^1.28.1",
     "debug": "^3.1.0",
-    "neeo-sdk": "^0.53.8"
+    "neeo-sdk": "^0.53.8",
+    "one-websocket": "^2.0.0"
   },
   "devDependencies": {},
   "scripts": {
@@ -27,9 +28,5 @@
   },
   "engines": {
     "node": ">=8.0.0"
-  },
-  "neeoSdkOptions": {
-    "serverName": "nvidia-shield",
-    "serverPort": 6337
   }
 }
