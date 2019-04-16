@@ -25,5 +25,5 @@ Specific commands for the Android Shield TV are (with modifier "0" unless otherw
   - Previous song (234)
  
 ## A note on recent apps
-Recent apps uses the modifier 4 (alt) and key 43 (tab), but it has to be kept pressed in for the recent apps menu to show up. This means that task switching cannot be done yet, without implementing a set of keypresses to kill the current app for example. Since you can still kill apps via the settings menu i left this functionality as 'not-implemented'.
+Recent apps uses the modifier 4 (alt) and key 43 (tab), but it has to be kept pressed in (just like on a keyboard) for the recent apps menu to show up. This means that task switching cannot be done yet, without implementing a set of keypresses to kill the current app for example. Since you can still kill apps via the settings menu i left this functionality as 'not-implemented'.
 
