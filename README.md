@@ -1,8 +1,29 @@
 # Neeo-driver-nvidia-shield
-This is driver for the Neeo remote to support the NVidia Shield via BlueTooth. It consists of a [peripheral](./peripheral) which runs on, for example, a Raspberry Pi and a [driver](./driver) which can also run on a Raspberry Pi. The peripheral uses a plugged in bluetooth USB adapter to act as a 'keyboard' for the NVidia Shield.
+This is driver for the Neeo remote to support the NVidia Shield via BlueTooth. It should be combined with my [websocket-to-ble-hid-bridge](https://github.com/Webunity/websocket-to-ble-hid-bridge) which runs on, for example, a Raspberry Pi and this driver which can also run on a Raspberry Pi. The peripheral uses a plugged in bluetooth USB adapter to act as a 'keyboard' for the NVidia Shield.
 
 The driver receives commands from the Neeo remote, and passes them on via websockets to the 'keyboard' which in turn passes the commands on to the NVidia Shield over BLE.
 
-> Inspiration taken from:
-http://www.freebsddiary.org/APC/usb_hid_usages.php
-https://gist.github.com/MightyPork/6da26e382a7ad91b5496ee55fdc73db2
+## Keycodes for the NVidia Shield
+Specific commands for the Android Shield TV are (with modifier "0" unless otherwise mentioned):
+  - Left          (92)
+  - Right         (94)
+  - Up            (96)
+  - Down          (90)
+  - Select        (40)
+  - Back          (41)
+  - Home          (1,41)
+  - Volume up     (237)
+  - Volume down   (238)
+  - Mute          (239)
+  - Menu          (101)
+  - Power on/off  (102)
+  - Play/pause    (232)
+  - Stop          (243)
+  - Fast forward  (242)
+  - Fast reverse  (241)
+  - Next song     (235)
+  - Previous song (234)
+ 
+## A note on recent apps
+Recent apps uses the modifier 4 (alt) and key 43 (tab), but it has to be kept pressed in for the recent apps menu to show up. This means that task switching cannot be done yet, without implementing a set of keypresses to kill the current app for example. Since you can still kill apps via the settings menu i left this functionality as 'not-implemented'.
+
