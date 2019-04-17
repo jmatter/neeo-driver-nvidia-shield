@@ -3,6 +3,8 @@ This is driver for the Neeo remote to support the NVidia Shield via BlueTooth. I
 
 The driver receives commands from the Neeo remote, and passes them on via websockets to the 'keyboard' which in turn passes the commands on to the NVidia Shield over BLE.
 
+![how-it-works](./assets/neeo-driver-nvidia-shield.png?raw=true)
+
 ## Keycodes for the NVidia Shield
 Specific commands for the Android Shield TV are (with modifier "0" unless otherwise mentioned):
   - Left          (92)
